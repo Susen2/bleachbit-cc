@@ -90,6 +90,16 @@ class CCGUI(GUI):
         self.setup_drag_n_drop()
         self._quick_total = 0
         self._quick_active = False
+        show_page = os.environ.get('BLEACHBIT_CC_SHOW_PAGE')
+        if show_page:
+            import logging
+            logging.getLogger('bleachbit').info(
+                'CC debug: switching to page %r', show_page)
+
+            def _switch():
+                self.stack.set_visible_child_name(show_page)
+                return False
+            GLib.idle_add(_switch)
         self.show_all()
         self.progressbar.hide()
         self.infobar.hide()
