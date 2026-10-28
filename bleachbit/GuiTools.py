@@ -482,9 +482,165 @@ class DiskTool:
         return self.box.get_children()[2].get_child()
 
 
+class RegistryTool:
+    """Opt-in registry cleaner tab (backup before any fix)."""
+
+    def __init__(self, window):
+        self.window = window
+        self._issues = []
+        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.box.set_margin_top(8)
+        self.box.set_margin_start(8)
+        self.box.set_margin_end(8)
+
+        notice = Gtk.Label.new(_(
+            "高级功能，默认关闭。修复前会自动导出 .reg 备份到"
+            "“文档\\BleachBitCC-Backups”，可用 reg import 还原。"))
+        notice.set_halign(Gtk.Align.START)
+        notice.set_line_wrap(True)
+        self.box.add(notice)
+
+        enable_row = Gtk.Box(homogeneous=False, spacing=8)
+        enable_label = Gtk.Label.new(_("启用注册表清理"))
+        enable_label.set_halign(Gtk.Align.START)
+        self.enable_switch = Gtk.Switch()
+        self.enable_switch.set_active(self._enabled())
+        self.enable_switch.connect("notify::active", self._on_enable)
+        enable_row.pack_start(enable_label, False, False, 0)
+        enable_row.pack_end(self.enable_switch, False, False, 0)
+        self.box.add(enable_row)
+
+        bar = Gtk.Box(homogeneous=False, spacing=6)
+        self.scan_button = Gtk.Button.new_with_label(_("开始扫描"))
+        self.scan_button.set_sensitive(self._enabled())
+        self.scan_button.connect("clicked", self._on_scan)
+        self.fix_button = Gtk.Button.new_with_label(_("备份并修复所选"))
+        self.fix_button.set_sensitive(False)
+        self.fix_button.connect("clicked", self._on_fix)
+        for b in (self.scan_button, self.fix_button):
+            bar.pack_start(b, False, False, 0)
+        self.summary_label = Gtk.Label.new("")
+        self.summary_label.set_halign(Gtk.Align.START)
+        bar.pack_start(self.summary_label, False, False, 0)
+        self.box.add(bar)
+
+        # columns: selected, category, path, detail
+        self.store = Gtk.ListStore(bool, str, str, str, object)
+        view = Gtk.TreeView(model=self.store)
+        toggle = Gtk.CellRendererToggle()
+        toggle.connect("toggled", self._on_toggle)
+        view.append_column(Gtk.TreeViewColumn(_("选中"), toggle,
+                                              active=0))
+        for i, title in enumerate((_("类别"), _("注册表路径"), _("问题"))):
+            cell = Gtk.CellRendererText()
+            cell.set_property("ellipsize", 0)
+            column = Gtk.TreeViewColumn(title, cell, text=i)
+            column.set_resizable(True)
+            if i == 2:
+                column.set_expand(True)
+            view.append_column(column)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_property('expand', True)
+        scroll.add(view)
+        self.box.add(scroll)
+
+    @staticmethod
+    def _enabled():
+        from bleachbit.WinRegistry import is_registry_cleaner_enabled
+        return is_registry_cleaner_enabled()
+
+    def _on_enable(self, switch, _param):
+        from bleachbit.Options import options
+        options.set('registry_cleaner_enabled', switch.get_active())
+        self.scan_button.set_sensitive(switch.get_active())
+        if not switch.get_active():
+            self.store.clear()
+            self._issues = []
+            self.fix_button.set_sensitive(False)
+            self.summary_label.set_text("")
+
+    def _on_toggle(self, _renderer, path):
+        self.store[path][0] = not self.store[path][0]
+
+    def _on_scan(self, _widget):
+        import threading
+        self.scan_button.set_sensitive(False)
+        self.store.clear()
+        self._issues = []
+        self.fix_button.set_sensitive(False)
+        self.summary_label.set_text(_("正在扫描……"))
+        thread = threading.Thread(target=self._scan_worker, daemon=True)
+        thread.start()
+
+    def _scan_worker(self):
+        from bleachbit import WinRegistry
+        try:
+            issues = WinRegistry.scan_registry()
+        except Exception as e:
+            GLib.idle_add(self._scan_done, None, str(e))
+            return
+        GLib.idle_add(self._scan_done, issues, None)
+
+    def _scan_done(self, issues, error):
+        self.scan_button.set_sensitive(True)
+        if error:
+            self.summary_label.set_text(_("扫描失败: %s") % error)
+            return False
+        self._issues = issues
+        for issue in issues:
+            self.store.append([True, issue.category, issue.full_path,
+                               issue.detail, issue])
+        self.summary_label.set_text(
+            _("发现 %d 个问题（HKLM 项需要管理员权限）。") % len(issues))
+        self.fix_button.set_sensitive(bool(issues))
+        return False
+
+    def _on_fix(self, _widget):
+        selected = [row[4] for row in self.store if row[0]]
+        if not selected:
+            return
+        backup_dir = os.path.join(
+            os.path.expanduser("~"), "Documents",
+            "BleachBitCC-Backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        import time
+        backup_path = os.path.join(
+            backup_dir, "registry-backup-%s.reg" %
+            time.strftime("%Y%m%d-%H%M%S"))
+        try:
+            from bleachbit.WinRegistry import write_reg_backup
+            write_reg_backup(selected, backup_path)
+        except Exception as e:
+            _error(self.window, _("导出备份失败，已取消修复: %s") % e)
+            return
+        if not _confirm(
+                self.window,
+                _("删除选中的 %d 项？") % len(selected),
+                _("已导出备份：\n%s\n\n确认后执行删除。") % backup_path):
+            return
+        failures = []
+        from bleachbit.WinRegistry import fix_issue
+        for issue in selected:
+            error = fix_issue(issue)
+            if error:
+                failures.append("%s: %s" % (issue.full_path, error))
+        if failures:
+            _error(self.window, _("部分条目修复失败：\n") + "\n".join(
+                failures[:10]))
+        self.window.append_text(
+            _("注册表清理完成：修复 %d 项，失败 %d 项，备份 %s") %
+            (len(selected) - len(failures), len(failures),
+             backup_path) + "\n")
+        self._on_scan(None)
+
+    @property
+    def _view(self):
+        return self.box.get_children()[3].get_child()
+
+
 def build_tools_notebook(window):
-    """Create the tools notebook with all tabs (registry pending M4)."""
-    from bleachbit.GuiToolsExtra import make_placeholder
+    """Create the tools notebook with all tabs."""
     notebook = Gtk.Notebook()
     notebook.append_page(StartupTool(window).box, Gtk.Label.new(_("启动项")))
     notebook.append_page(UninstallTool(window).box,
@@ -493,7 +649,6 @@ def build_tools_notebook(window):
                          Gtk.Label.new(_("重复文件")))
     notebook.append_page(DiskTool(window).box,
                          Gtk.Label.new(_("磁盘分析")))
-    notebook.append_page(make_placeholder(
-        _("注册表清理将在后续里程碑提供（默认关闭）。")),
-        Gtk.Label.new(_("注册表清理")))
+    notebook.append_page(RegistryTool(window).box,
+                         Gtk.Label.new(_("注册表清理")))
     return notebook
