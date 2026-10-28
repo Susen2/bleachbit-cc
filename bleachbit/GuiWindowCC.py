@@ -219,25 +219,9 @@ class CCGUI(GUI):
         return page
 
     def _build_tools_page(self):
-        """Tools page: filled by milestones M2/M3/M4."""
-        notebook = Gtk.Notebook()
-
-        def placeholder(text):
-            label = Gtk.Label.new(text)
-            label.show()
-            return label
-
-        notebook.append_page(placeholder(_("此功能将在后续版本中提供。")),
-                             Gtk.Label.new(_("启动项")))
-        notebook.append_page(placeholder(_("此功能将在后续版本中提供。")),
-                             Gtk.Label.new(_("卸载器")))
-        notebook.append_page(placeholder(_("此功能将在后续版本中提供。")),
-                             Gtk.Label.new(_("重复文件")))
-        notebook.append_page(placeholder(_("此功能将在后续版本中提供。")),
-                             Gtk.Label.new(_("磁盘分析")))
-        notebook.append_page(placeholder(_("此功能将在后续版本中提供。")),
-                             Gtk.Label.new(_("注册表清理")))
-        return notebook
+        """Tools page: startup manager, uninstaller (M2), more in M3/M4."""
+        from bleachbit.GuiTools import build_tools_notebook
+        return build_tools_notebook(self)
 
     def _build_options_page(self):
         """Options shortcuts page."""
