@@ -341,9 +341,28 @@ class Bleachbit(Gtk.Application):
                 break
         dialog.destroy()
 
+    def _pick_window_class(self):
+        """Choose the CC-style shell or the classic window.
+
+        Escape hatch: options key `cc_layout` set to false, or the
+        environment variable BLEACHBIT_CLASSIC_GUI=1.
+        """
+        if os.environ.get('BLEACHBIT_CLASSIC_GUI') == '1':
+            return GUI
+        if options.get('cc_layout') is False:
+            return GUI
+        try:
+            from bleachbit.GuiWindowCC import CCGUI
+            return CCGUI
+        except Exception:
+            logger.exception(
+                'CC-style window unavailable, falling back to classic GUI')
+            return GUI
+
     def do_activate(self):
         if not self._window:
-            self._window = GUI(
+            window_cls = self._pick_window_class()
+            self._window = window_cls(
                 application=self, title=APP_NAME, auto_exit=self._auto_exit)
         self._window.present()
         if self._shred_paths:
