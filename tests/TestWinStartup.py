@@ -91,6 +91,15 @@ class FakeWinreg:
             raise FakeWinregError(259, "no more")
         return children[index]
 
+    def DeleteKey(self, key, subkey_name):
+        full = (key.hive,
+                key.subkey + "\\" + subkey_name if key.subkey
+                else subkey_name,
+                key.view)
+        if full not in self.store:
+            raise FakeWinregError(2, "not found")
+        del self.store[full]
+
     def ensure(self, hive, subkey, view=0):
         return self.store.setdefault((hive, subkey, view), {})
 
@@ -105,7 +114,7 @@ def _make_module(fake):
                  "REG_SZ"):
         setattr(mod, attr, getattr(fake, attr))
     for fn in ("OpenKey", "CreateKey", "QueryValueEx", "SetValueEx",
-               "DeleteValue", "EnumValue", "EnumKey"):
+               "DeleteValue", "EnumValue", "EnumKey", "DeleteKey"):
         setattr(mod, fn, getattr(fake, fn))
     return mod
 

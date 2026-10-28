@@ -248,7 +248,8 @@ def write_reg_backup(issues, backup_path):
     for issue in issues:
         full = "%s\\%s" % (issue.hive_name, issue.subkey)
         if issue.kind == "key" or full not in written:
-            lines.append("[%s]" % _reg_escape(full))
+            # section paths use single backslashes (no escaping)
+            lines.append("[%s]" % full)
             written.add(full)
         if issue.kind == "value" and issue.name:
             try:
