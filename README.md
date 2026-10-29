@@ -1,6 +1,31 @@
+# BleachBit CC（BleachBit 二开版）
+
+> **本仓库是 [BleachBit](https://github.com/bleachbit/bleachbit) 6.0.6 的二次开发版本**（GPLv3），
+> 目标：CCleaner 式的新手友好布局 + 补齐常用功能。所有修改遵循 GPL-3.0-or-later，
+> 清理引擎与清理规则保持上游原样，便于合并上游更新。
+
+## 相对上游 6.0.6 的修改
+
+- **CCleaner 式四页布局**（一键清理 / 自定义清理 / 工具 / 选项，GTK3 StackSidebar），可随时切回经典界面
+- **一键清理**：安全预设（自动排除 Cookie、密码、表单数据、空闲空间擦除等高危项），预览 → 清理两步流程
+- **启动项管理**：注册表 Run/RunOnce（HKCU/HKLM 64/32 位视图）+ 启动文件夹，禁用可恢复
+- **软件卸载器**：枚举已安装程序，优先静默卸载
+- **重复文件查找**：大小分桶 + MD5 精确比对，后台线程可停止
+- **磁盘分析**：目录占用聚合排序
+- **注册表清理**：默认关闭，保守扫描四类，修复前自动导出 .reg 备份
+
+## 运行
+
+Windows 便携版见 Releases（未发布前可用源码运行：`python3 bleachbit.py`，Windows 需按
+`windows/requirements.txt` 安装 PyGObject/GTK3，或直接使用官方 6.0.6 便携版 + 本仓库 `library.zip`
+模块替换方案，见 `devtools`/ROADMAP 说明）。上游文档见下方原文。
+
+---
+
 # BleachBit
 
 BleachBit cleans files to free disk space and to maintain privacy.
+
 
 ## Running from source
 
